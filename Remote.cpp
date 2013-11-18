@@ -3,12 +3,6 @@
 #include <process.h>
 
 
-#ifdef _DEBUG
-#define new DEBUG_NEW
-#undef THIS_FILE
-static char THIS_FILE[] = __FILE__;
-#endif
-
 volatile long gInProcessRequests = 0;
 
 extern CString gLogPath;
@@ -184,7 +178,7 @@ CString GetRemoteServiceName(Settings& settings)
 		wchar_t localComputerName[1000] = {0};
 		DWORD len = ARRAYSIZE(localComputerName);
 		GetComputerNameEx(ComputerNamePhysicalNetBIOS, localComputerName, &len);
-		name += StrFormat(L"%u-%s", GetProcessId(GetCurrentProcess()), localComputerName);
+		name += StrFormat(L"%u-%s", GetCurrentProcessId(), localComputerName);
 		return name;
 	}
 }
@@ -1053,7 +1047,7 @@ DWORD RemMsg::GetUniqueID()
 	if(0 == id)
 	{
 		//a unique ID to identify this process on this machine to the service on the other side
-		id = GetProcessId(NULL);
+		id = GetCurrentProcessId();
 		wchar_t compNameBuffer[1024] = {0};
 		DWORD buffLen = sizeof(compNameBuffer)/sizeof(wchar_t);
 		GetComputerName(compNameBuffer, &buffLen);

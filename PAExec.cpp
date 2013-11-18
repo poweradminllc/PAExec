@@ -10,19 +10,13 @@
 
 #include "stdafx.h"
 #include "PAExec.h"
-#include "..\ServerMonCfg\CmdLineParser.h"
+#include "CmdLineParser.h"
 #include <conio.h>
 #include <vector>
 #include <lm.h>
 #include <UserEnv.h>
 #include <WtsApi32.h>
 
-
-#ifdef _DEBUG
-#define new DEBUG_NEW
-#undef THIS_FILE
-static char THIS_FILE[] = __FILE__;
-#endif
 
 
 

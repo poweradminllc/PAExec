@@ -17,8 +17,10 @@
 #include <atlstr.h>
 #include <time.h>
 
-#ifndef _DEBUG
-#define VERIFY(x) x
+#ifdef _DEBUG
+	#define VERIFY(x) { BOOL b = x; _ASSERT(b); }
+#else
+	#define VERIFY(x) x
 #endif
 
 #ifndef VC_EXTRALEAN
@@ -39,7 +41,7 @@
 #include <Windows.h>
 #include <WinSvc.h>
 #include <vector>
-#include "..\ServerMonCfg\CmdLineParser.h"
+#include "CmdLineParser.h"
 
 extern bool gbODS;
 extern bool gbStop;

@@ -10,12 +10,6 @@
 #include "stdafx.h"
 #include "PAExec.h"
 
-#ifdef _DEBUG
-#define new DEBUG_NEW
-#undef THIS_FILE
-static char THIS_FILE[] = __FILE__;
-#endif
-
 extern bool gbODS;
 extern CString gLogPath;
 
