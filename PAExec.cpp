@@ -416,6 +416,21 @@ void RegressionTests()
 
 	{
 		Settings settings;
+		_ASSERT(ParseCommandLine(settings, L"C:\\PAExec.exe \\\\192.168.7.2 -i calc")); //make sure -i doesn't eat calc
+
+		_ASSERT(0 == settings.app.CompareNoCase(L"calc"));
+	}
+
+	{
+		Settings settings1, settings2;
+		_ASSERT(ParseCommandLine(settings1, L"C:\\PAExec.exe \\\\192.168.7.2 -i calc")); //make sure -i doesn't eat calc
+		_ASSERT(ParseCommandLine(settings2, L"C:\\PAExec.exe \\\\192.168.7.2 calc")); //make sure -i doesn't eat calc
+
+		_ASSERT(settings1.app == settings2.app);
+	}
+
+	{
+		Settings settings;
 		_ASSERT(ParseCommandLine(settings, L"\"C:\\dir with space\\PAExec.exe\" -u doug -p test -c -w \"C:\\Windows space\\system32\" cmd.exe"));
 
 		RemMsg msg1;

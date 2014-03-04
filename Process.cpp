@@ -39,6 +39,7 @@ void Duplicate(HANDLE& h, LPCSTR file, int line)
 	}
 	else
 	{
+		DWORD gle = GetLastError();
 		_ASSERT(0);
 		Log(StrFormat(L"Error duplicating a user token (%S, %d)", file, line), GetLastError());
 	}
@@ -160,10 +161,21 @@ bool GetUserHandle(Settings& settings, BOOL& bLoadedProfile, PROFILEINFO& profil
 					Log(L"Impersonated caller", false);
 			}
 
-			BOOL bOpen = OpenThreadToken(GetCurrentThread(), TOKEN_DUPLICATE | TOKEN_QUERY, FALSE, &settings.hUser);
-			//BOOL bOpen = OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE | TOKEN_QUERY, &settings.hUser);
+			HANDLE hThread = GetCurrentThread();
+			BOOL bDupe = DuplicateHandle(GetCurrentProcess(), hThread, GetCurrentProcess(), &hThread, 0, TRUE, DUPLICATE_SAME_ACCESS);
+			DWORD gle = GetLastError();
+
+			BOOL bOpen = OpenThreadToken(hThread, TOKEN_DUPLICATE | TOKEN_QUERY, TRUE, &settings.hUser);
+			gle = GetLastError();
+			if(1008 == gle) //no thread token
+			{
+				bOpen = OpenProcessToken(GetCurrentProcess(), TOKEN_DUPLICATE | TOKEN_QUERY, &settings.hUser);
+				gle = GetLastError();
+			}
+
 			if(FALSE == bOpen)
 				Log(L"Failed to open current user token", GetLastError());
+
 			Duplicate(settings.hUser, __FILE__, __LINE__); //gives max rights
 			RevertToSelf();
 			return !BAD_HANDLE(settings.hUser);
@@ -364,14 +376,16 @@ bool StartProcess(Settings& settings, HANDLE hCmdPipe)
 			EnablePrivilege(SE_INCREASE_QUOTA_NAME);
 			EnablePrivilege(SE_IMPERSONATE_NAME);
 
-			bLaunched = CreateProcessAsUser(settings.hUser, NULL, path.LockBuffer(), NULL, NULL, TRUE, dwFlags, pEnvironment, startingDir, &si, &pi);
-			//bLaunched = CreateProcess(NULL, path.LockBuffer(), NULL, NULL, TRUE, dwFlags, pEnvironment, startingDir, &si, &pi);
+			if(NULL != settings.hUser)
+				bLaunched = CreateProcessAsUser(settings.hUser, NULL, path.LockBuffer(), NULL, NULL, TRUE, dwFlags, pEnvironment, startingDir, &si, &pi);
+			if(FALSE == bLaunched)
+				bLaunched = CreateProcess(NULL, path.LockBuffer(), NULL, NULL, TRUE, dwFlags, pEnvironment, startingDir, &si, &pi);
 			launchGLE = GetLastError();
 	
 //#ifdef _DEBUG
 			if(0 != launchGLE)
-				Log(StrFormat(L"Launch (launchGLE=%u) params: path=[%s] pEnv=[%s], dir=[%s], stdin=[x%X], stdout=[x%X], stderr=[x%X]",
-					launchGLE, path, pEnvironment ? L"{env}" : L"{null}", startingDir ? startingDir : L"{null}", 
+				Log(StrFormat(L"Launch (launchGLE=%u) params: path=[%s] user=[%s], pEnv=[%s], dir=[%s], stdin=[x%X], stdout=[x%X], stderr=[x%X]",
+					launchGLE, path, settings.hUser ? L"{non-null}" : L"{null}", pEnvironment ? L"{env}" : L"{null}", startingDir ? startingDir : L"{null}", 
 					(DWORD)si.hStdInput, (DWORD)si.hStdOutput, (DWORD)si.hStdError), false);
 //#endif
 			path.UnlockBuffer();

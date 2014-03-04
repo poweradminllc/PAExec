@@ -176,43 +176,44 @@ typedef struct
 {
 	LPCWSTR cmd;
 	bool	bCanHaveArgs;
+	bool	bMustHaveArgs;
 }CommandList;
 
 CommandList gSupportedCommands[] = 
 {
-	{L"u", true},
-	{L"p", true},
-	{L"p@", true},
-	{L"p@d", false},
-	{L"n", true},
-	{L"l", false},
-	{L"h", false},
-	{L"s", false},
-	{L"e", false},
-	{L"x", false},
-	{L"i", true},
-	{L"c", false},
-	{L"cnodel", false},
-	{L"f", false},
-	{L"v", false},
-	{L"w", true},
-	{L"d", false},
-	{L"low", false},
-	{L"belownormal", false},
-	{L"abovenormal", false},
-	{L"high", false},
-	{L"realtime", false},
-	{L"background", false},
-	{L"a", true},
-	{L"csrc", true},
-	{L"clist", true},
-	{L"dfr", false},
-	{L"lo", true},
-	{L"rlo", true},
-	{L"dbg", false},
-	{L"to", true},
-	{L"noname", false}, 
-	{L"accepteula", false} //non-documented PSExec command that we'll just silently eat
+	{L"u", true, true},
+	{L"p", true, false},
+	{L"p@", true, true},
+	{L"p@d", false, false},
+	{L"n", true, true},
+	{L"l", false, false},
+	{L"h", false, false},
+	{L"s", false, false},
+	{L"e", false, false},
+	{L"x", false, false},
+	{L"i", true, false},
+	{L"c", false, false},
+	{L"cnodel", false, false},
+	{L"f", false, false},
+	{L"v", false, false},
+	{L"w", true, true},
+	{L"d", false, false},
+	{L"low", false, false},
+	{L"belownormal", false, false},
+	{L"abovenormal", false, false},
+	{L"high", false, false},
+	{L"realtime", false, false},
+	{L"background", false, false},
+	{L"a", true, true},
+	{L"csrc", true, true},
+	{L"clist", true, true},
+	{L"dfr", false, false},
+	{L"lo", true, true},
+	{L"rlo", true, true},
+	{L"dbg", false, false},
+	{L"to", true, true},
+	{L"noname", false, false}, 
+	{L"accepteula", false, false} //non-documented PSExec command that we'll just silently eat
 };
 
 LPCWSTR EatWhiteSpace(LPCWSTR ptr)
@@ -283,6 +284,13 @@ bool SplitCommand(CString& restOfLine, LPCWSTR& paExecParams, LPCWSTR& appToRun)
 			{
 				if( (L'-' != *ptr) && (L'/' != *ptr))
 				{
+					//special handling for -i which may or may not have an argument, but if it does, it is numeric
+					if(0 == wcscmp(gSupportedCommands[i].cmd, L"i"))
+					{
+						if(0 == wtodw(ptr))
+							continue; //no argument
+					}
+					
 					bool bInQuote = false;
 					while((!iswspace(*ptr) || (*ptr == L'"') || bInQuote) && *ptr)
 					{
@@ -292,7 +300,7 @@ bool SplitCommand(CString& restOfLine, LPCWSTR& paExecParams, LPCWSTR& appToRun)
 					}
 					//to end of arg now
 					ptr = (LPWSTR)EatWhiteSpace(ptr);
-					if(L'\0' == *ptr)
+					if((L'\0' == *ptr) && (gSupportedCommands[i].bMustHaveArgs))
 					{
 						Log(L"Reached end of command before seeing expected parts", true);
 						_ASSERT(0);
