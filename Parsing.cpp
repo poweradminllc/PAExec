@@ -389,10 +389,11 @@ bool ParseCommandLine(Settings& settings, LPCWSTR cmdLine)
 		{
 			if(settings.bUseSystemAccount || settings.bRunLimited)
 			{
-				Log(L"Can't use -h, -s, or -l together", true);
+				Log(L"Can't use -h and -l together", true);
 				return false;
 			}
-			settings.bRunElevated = true;
+			if(!settings.bUseSystemAccount) //ignore if -s already given
+				settings.bRunElevated = true;
 		}
 
 		if(cmdParser.HasKey(L"l"))
@@ -483,11 +484,13 @@ bool ParseCommandLine(Settings& settings, LPCWSTR cmdLine)
 			//	Log(L"Specified -s and -u");
 			//	return false;
 			//}
-			if(settings.bRunLimited || settings.bRunElevated)
+			if(settings.bRunLimited)
 			{
-				Log(L"Can't use -h, -s, or -l together", true);
+				Log(L"Can't use -s and -l together", true);
 				return false;
 			}
+			if(settings.bRunElevated)
+				settings.bRunElevated = false; //ignore -h if -s given
 			settings.bUseSystemAccount = true;
 		}
 		else
