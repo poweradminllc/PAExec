@@ -78,6 +78,11 @@ void Log(LPCWSTR str, DWORD lastError)
 	Log(s, 0 != lastError);
 }
 
+bool IsStdOut()
+{
+	return gLogPath.Compare(L"stdout") == 0;
+}
+
 void Log(LPCWSTR str, bool bForceODS)
 {
 	CString s = str;
@@ -92,15 +97,23 @@ void Log(LPCWSTR str, bool bForceODS)
 
 	if(FALSE == gLogPath.IsEmpty())
 	{
-		HANDLE hf = CreateFile(gLogPath, GENERIC_WRITE, 0, 0, OPEN_ALWAYS, 0, 0);
+		HANDLE hf;
+		if (!IsStdOut())
+			hf = CreateFile(gLogPath, GENERIC_WRITE, 0, 0, OPEN_ALWAYS, 0, 0);
+		else
+			hf = GetStdHandle( STD_OUTPUT_HANDLE );
+
 		if(!BAD_HANDLE(hf))
 		{
 			DWORD ignored;
-			ULARGE_INTEGER ui = {0};
-			ui.LowPart = GetFileSize(hf, &ui.HighPart);
-			if(0 == ui.QuadPart)
-				WriteFile(hf, &UTF8_BOM, sizeof(UTF8_BOM), &ignored, 0);  
-			SetFilePointer(hf, 0, 0, FILE_END);
+			if (!IsStdOut())
+			{
+				ULARGE_INTEGER ui = {0};
+				ui.LowPart = GetFileSize(hf, &ui.HighPart);
+				if(0 == ui.QuadPart)
+					WriteFile(hf, &UTF8_BOM, sizeof(UTF8_BOM), &ignored, 0);  
+				SetFilePointer(hf, 0, 0, FILE_END);
+			}
 			
 			//now convert to UTF-8
 			DWORD len = WideCharToMultiByte(CP_UTF8, 0, s, wcslen(s), NULL, 0, NULL, NULL);
@@ -113,7 +126,9 @@ void Log(LPCWSTR str, bool bForceODS)
 				delete [] pBuff;
 			}
 			FlushFileBuffers(hf);
-			CloseHandle(hf);
+
+			if (!IsStdOut())
+				CloseHandle(hf);
 		}
 	}
 	gLastLog = s;
