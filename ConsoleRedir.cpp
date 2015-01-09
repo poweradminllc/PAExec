@@ -124,13 +124,14 @@ UINT WINAPI ListenRemoteOutPipeThread(void* p)
 		if (!ReadFile( pLP->pSettings->hStdOut, szBuffer, SIZEOF_BUFFER - 1, &dwRead, &olR) || (dwRead == 0)) 
 		{
 			DWORD dwErr = GetLastError();
-			if ( dwErr == ERROR_NO_DATA)
+			if ( dwErr != ERROR_MORE_DATA)
 				break;
 		}
 
 		if(gbStop)
 			break;
 
+		/*
 		HANDLE waits[2];
 		waits[0] = pLP->hStop;
 		waits[1] = hEvent;
@@ -138,6 +139,7 @@ UINT WINAPI ListenRemoteOutPipeThread(void* p)
 		if(ret == WAIT_OBJECT_0)
 			break; //need to exit
 		_ASSERT(ret == WAIT_OBJECT_0 + 1); //data in buffer now
+		*/
 
 		// Handle CLS command, just for fun :)
 		switch( szBuffer[0] )
@@ -219,13 +221,14 @@ UINT WINAPI ListenRemoteErrorPipeThread(void* p)
 		if(!ReadFile( pLP->pSettings->hStdErr, szBuffer, SIZEOF_BUFFER, &dwRead, &olR) || (dwRead == 0)) 
 		{
 			DWORD dwErr = GetLastError();
-			if ( dwErr == ERROR_NO_DATA)
+			if ( dwErr != ERROR_MORE_DATA)
 				break;
 		}
 
 		if(gbStop)
 			break;
 
+		/*
 		HANDLE waits[2];
 		waits[0] = pLP->hStop;
 		waits[1] = olR.hEvent;
@@ -233,7 +236,7 @@ UINT WINAPI ListenRemoteErrorPipeThread(void* p)
 		if(ret == WAIT_OBJECT_0)
 			break; //need to exit
 		_ASSERT(ret == WAIT_OBJECT_0 + 1); //data in buffer now
-
+		*/
 		szBuffer[ dwRead / sizeof(szBuffer[0]) ] = _T('\0');
 
 		// Write it to our stderr
