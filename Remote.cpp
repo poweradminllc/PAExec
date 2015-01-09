@@ -828,7 +828,8 @@ void HandleMsg(RemMsg& msg, RemMsg& response, HANDLE hPipe)
 
 			//below line also gets version information if possible
 			pRemoteSettings->ResolveFilePaths(); //after logging is setup.  non-existent files will be marked as needing to be copied
-			pRemoteSettings->app = pRemoteSettings->destFileInfos[0].fullFilePath;
+			if (pRemoteSettings->app.Compare(pRemoteSettings->destFileInfos[0].filenameOnly) == 0) // if app not the same as dest file, don't set it
+				pRemoteSettings->app = pRemoteSettings->destFileInfos[0].fullFilePath;
 
 			int index = 0;
 			FILETIME zero = {0};

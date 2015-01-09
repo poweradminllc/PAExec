@@ -206,6 +206,7 @@ CommandList gSupportedCommands[] =
 	{L"background", false, false},
 	{L"a", true, true},
 	{L"csrc", true, true},
+	{L"cdst", true, true},
 	{L"clist", true, true},
 	{L"dfr", false, false},
 	{L"lo", true, true},
@@ -563,6 +564,13 @@ bool ParseCommandLine(Settings& settings, LPCWSTR cmdLine)
 			}
 			tmp.UnlockBuffer();
 			settings.srcDir = (LPCWSTR)tmp; //store folder
+
+			if(cmdParser.HasKey(L"cdst"))
+			{
+				FileInfo fi;
+				fi.filenameOnly = cmdParser.GetVal(L"cdst");
+				settings.destFileInfos.push_back(fi);
+			}
 		}
 
 		if(cmdParser.HasKey(L"clist"))
@@ -700,7 +708,11 @@ bool ParseCommandLine(Settings& settings, LPCWSTR cmdLine)
 			//now create destFileList based on app and srcFileList
 			FileInfo fi;
 			fi.filenameOnly = settings.app;
-			settings.destFileInfos.push_back(fi); //index 0
+			
+			if(settings.destFileInfos.empty())
+			{
+				settings.destFileInfos.push_back(fi); //index 0
+			}
 
 			if(settings.srcFileInfos.empty())
 			{
