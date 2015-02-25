@@ -449,7 +449,7 @@ bool StartProcess(Settings& settings, HANDLE hCmdPipe)
 
 
 
-CString GetTokenUser(HANDLE hToken)
+CString GetTokenUserSID(HANDLE hToken)
 {
 	DWORD tmp = 0;
 	CString userName;
@@ -469,23 +469,11 @@ CString GetTokenUser(HANDLE hToken)
 
 	if(GetTokenInformation(hToken, TokenUser, userToken, userTokenSize, &tmp))
 	{
-		SID_NAME_USE snUse;
-		if( LookupAccountSidW(NULL, userToken->User.Sid, 
-			&sidName.front(), &--sidNameSize, &sidDomain.front(), 
-			&--sidDomainSize, &snUse ))
-		{
-			userName = &sidDomain.front();
-			userName += L"\\";
-			userName += &sidName.front();
-		}
-		else
-		{
-			WCHAR *pSidString = NULL;
-			if(ConvertSidToStringSid(userToken->User.Sid, &pSidString))
-				userName = pSidString;
-			if(NULL != pSidString)
-				LocalFree(pSidString);
-		}
+		WCHAR *pSidString = NULL;
+		if(ConvertSidToStringSid(userToken->User.Sid, &pSidString))
+			userName = pSidString;
+		if(NULL != pSidString)
+			LocalFree(pSidString);
 	}
 	else
 		_ASSERT(0);
@@ -517,9 +505,12 @@ HANDLE GetLocalSystemProcessToken()
 			{
 				try
 				{
-					CString name = GetTokenUser(hToken);
-					const wchar_t arg[] = L"NT AUTHORITY\\";
-					if(0 == _wcsnicmp(name, arg, sizeof(arg)/sizeof(arg[0])-1))
+					CString name = GetTokenUserSID(hToken);
+					
+					//const wchar_t arg[] = L"NT AUTHORITY\\";
+					//if(0 == _wcsnicmp(name, arg, sizeof(arg)/sizeof(arg[0])-1))
+
+					if(name == L"S-1-5-18") //Well known SID for Local System
 					{
 						CloseHandle(hProcess);
 						return hToken;
