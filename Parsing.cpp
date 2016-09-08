@@ -287,8 +287,12 @@ bool SplitCommand(CString& restOfLine, LPCWSTR& paExecParams, LPCWSTR& appToRun)
 					//special handling for -i which may or may not have an argument, but if it does, it is numeric
 					if(0 == wcscmp(gSupportedCommands[i].cmd, L"i"))
 					{
-						if(0 == wtodw(ptr))
-							continue; //no argument
+						//wtodw(' ') and wtodw('0') both return 0
+						if(L'0' != *ptr)
+						{
+							if(0 == wtodw(ptr))
+								continue; //no argument
+						}
 					}
 					
 					bool bInQuote = false;
