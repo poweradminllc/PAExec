@@ -171,6 +171,8 @@ CString GetRemoteServiceName(Settings& settings)
 {
 	if(settings.bNoName)
 		return L"PAExec";
+	else if (!settings.serviceName.IsEmpty())
+		return settings.serviceName;
 	else
 	{
 		//Installed service will use a unique name so we can have multiple running at once

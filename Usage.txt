@@ -8,7 +8,7 @@ Usage: PAExec [\\computer[,computer2[,...]] | @file]
 [-u user [-p psswd]|[-p@ file [-p@d]]] 
 [-n s] [-l][-s|-e][-x][-i [session]][-c [-f|-v] [-csrc path]]
 [-lo path][-rlo path][-ods][-w directory][-d][-<priority>][-a n,n,...]
-[-dfr][-noname][-to seconds] cmd [arguments]
+[-dfr][-noname][-sname name][-to seconds] cmd [arguments]
 
 Standard PAExec\PsExec command line options:
 
@@ -136,7 +136,9 @@ Additional options only available in PAExec:
      -noname   In order to robustly handle multiple simultaneous connections to a server,
                the source server's name is added to the remote service name and remote PAExec
                executable file.  If you do NOT want this behavior, use -noname
-               
+
+     -sname    Remote service name.
+               This option is not compatible with -noname
 
 The application name, copy source, working directory and log file
 entries can be quoted if the path contains a space.  For example:

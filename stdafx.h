@@ -337,6 +337,7 @@ public:
 	bool bNeedToDeleteServiceFile;
 	bool bNeedToDeleteService;
 	bool bNoName;
+	CString serviceName;
 };
 
 class ListenParam

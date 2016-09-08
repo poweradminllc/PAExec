@@ -212,7 +212,8 @@ CommandList gSupportedCommands[] =
 	{L"rlo", true, true},
 	{L"dbg", false, false},
 	{L"to", true, true},
-	{L"noname", false, false}, 
+	{L"noname", false, false},
+	{L"sname", true, true},
 	{L"accepteula", false, false} //non-documented PSExec command that we'll just silently eat
 };
 
@@ -540,7 +541,9 @@ bool ParseCommandLine(Settings& settings, LPCWSTR cmdLine)
 
 		if(cmdParser.HasKey(L"noname"))
 			settings.bNoName = true;
-		
+		else if (cmdParser.HasKey(L"sname"))
+			settings.serviceName = cmdParser.GetVal(L"sname");
+
 		if(cmdParser.HasKey(L"csrc"))
 		{
 			if(false == settings.bCopyFiles)
