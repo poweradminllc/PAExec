@@ -216,7 +216,7 @@ UINT WINAPI ListenRemoteErrorPipeThread(void* p)
 	{ 
 		OVERLAPPED olR = {0};
 		olR.hEvent = hEvent;
-		if(!ReadFile( pLP->pSettings->hStdErr, szBuffer, SIZEOF_BUFFER, &dwRead, &olR) || (dwRead == 0)) 
+		if(!ReadFile( pLP->pSettings->hStdErr, szBuffer, SIZEOF_BUFFER - 1, &dwRead, &olR) || (dwRead == 0)) 
 		{
 			DWORD dwErr = GetLastError();
 			if ( dwErr == ERROR_NO_DATA)
@@ -294,7 +294,7 @@ UINT WINAPI ListenRemoteStdInputPipeThread(void* p)
 
 		nBytesRead = 0;
 		//if ( !ReadConsole( hInput, szInputBuffer, SIZEOF_BUFFER, &nBytesRead, NULL ) ) -- returns UNICODE which is not what we want
-		if (!ReadFile( hInput, szInputBuffer, SIZEOF_BUFFER, &nBytesRead, NULL))
+		if (!ReadFile( hInput, szInputBuffer, SIZEOF_BUFFER - 1, &nBytesRead, NULL))
 		{
 			DWORD dwErr = GetLastError();
 			if ( dwErr == ERROR_NO_DATA)
