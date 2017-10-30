@@ -331,7 +331,7 @@ void PrintUsage()
 	memcpy(pCopy, pB, size);
 	pCopy[size] = '\0';
 	printf("\r\n");
-	printf(pCopy);
+	printf("%s",pCopy);
 	printf("\r\n");
 	delete [] pCopy;
 }
