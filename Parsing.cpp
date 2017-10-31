@@ -332,7 +332,7 @@ bool ParseCommandLine(Settings& settings, LPCWSTR cmdLine)
 	{
 		cmdLinePastCompList = EatWhiteSpace(cmdLinePastCompList);
 
-		if(L'\0' == cmdLinePastCompList)
+		if(L'\0' == *cmdLinePastCompList)
 			return false; //empty command line -- just show usage
 
 		if((0 == wcsncmp(cmdLinePastCompList, L"/?", 2)) || (0 == wcsncmp(cmdLinePastCompList, L"-?", 2)))
