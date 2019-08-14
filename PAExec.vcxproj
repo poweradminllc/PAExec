@@ -71,9 +71,6 @@
       <TargetMachine>MachineX86</TargetMachine>
       <MinimumRequiredVersion>5.01</MinimumRequiredVersion>
     </Link>
-    <PostBuildEvent>
-      <Command>$(RemoteDebuggerWorkingDirectory)\sha1sum.exe $(TargetPath)</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -98,11 +95,6 @@
       <IgnoreSpecificDefaultLibraries>winmm.lib;uafxcw.lib</IgnoreSpecificDefaultLibraries>
       <MinimumRequiredVersion>5.01</MinimumRequiredVersion>
     </Link>
-    <PostBuildEvent>
-      <Message>Sign</Message>
-      <Command>C:\WinDDK\6001.18001\bin\SelfSign\signtool.exe sign /a /v /sm /du http://www.poweradmin.com /n "Power Admin LLC" /t http://timestamp.verisign.com/scripts/timstamp.dll /d "Power Admin LLC PAExec" $(TargetPath)
-$(RemoteDebuggerWorkingDirectory)\sha1sum.exe $(TargetPath)</Command>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="CmdLineParser.cpp" />
