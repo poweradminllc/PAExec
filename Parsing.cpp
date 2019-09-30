@@ -65,12 +65,15 @@ bool GetComputerList(Settings& settings, LPCWSTR& cmdLine)
 		//get server list from domain
 		SERVER_INFO_100* pInfo = NULL;
 		DWORD numServers = 0, total = 0;
-		NET_API_STATUS stat = NetServerEnum(NULL, 100, (LPBYTE*)&pInfo, MAX_PREFERRED_LENGTH, &numServers, &total, SV_TYPE_ALL, NULL, 0);
+		DWORD ignored = 0;
+		NET_API_STATUS stat = NetServerEnum(NULL, 100, (LPBYTE*)&pInfo, MAX_PREFERRED_LENGTH, &numServers, &total, SV_TYPE_SERVER | SV_TYPE_WINDOWS, NULL, &ignored);
 		if(NERR_Success == stat)
 		{
 			for(DWORD i = 0; i < numServers; i++)
 				settings.computerList.push_back(pInfo[i].sv100_name);
 		}
+		else
+			Log(L"Got error from NetServerEnum: ", (DWORD)stat);
 		NetApiBufferFree(pInfo);
 		pInfo = NULL;
 		if(settings.computerList.empty())

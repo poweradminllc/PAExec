@@ -315,7 +315,7 @@ void PrintCopyright()
 		verInfo = NULL;
 	}
 
-	Log(StrFormat(L"\r\nPAExec %s - Execute Programs Remotely\r\nCopyright (c) 2012-2013 Power Admin LLC\r\nwww.poweradmin.com/PAExec\r\n", ver), false);
+	Log(StrFormat(L"\r\nPAExec %s - Execute Programs Remotely\r\nCopyright (c) 2012-2019 Power Admin LLC\r\nwww.poweradmin.com/PAExec\r\n", ver), false);
 }
 
 
