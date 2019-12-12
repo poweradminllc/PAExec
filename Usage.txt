@@ -8,7 +8,8 @@ Usage: PAExec [\\computer[,computer2[,...]] | @file]
 [-u user [-p psswd]|[-p@ file [-p@d]]] 
 [-n s] [-l][-s|-e][-x][-i [session]][-c [-f|-v] [-csrc path]]
 [-lo path][-rlo path][-ods][-w directory][-d][-<priority>][-a n,n,...]
-[-dfr][-noname][-sname name][-to seconds] cmd [arguments]
+[-dfr][-noname][-sname name][-share share_name -sharepath share_path]
+[-to seconds] cmd [arguments]
 
 Standard PAExec\PsExec command line options:
 
@@ -139,6 +140,12 @@ Additional options only available in PAExec:
 
      -sname    Remote service name.
                This option is not compatible with -noname
+
+     -share    Remote share name.
+               -sharepath must be supplied when using this functionality
+
+     -sharepath Real path of specified remote share.
+               -sharepath can only be used with -share
 
 The application name, copy source, working directory and log file
 entries can be quoted if the path contains a space.  For example:

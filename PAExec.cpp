@@ -81,6 +81,13 @@ int wmain(int argc, wchar_t* argv[], wchar_t* envp[])
 				Log(L"-lo missing value", true);
 		}
 
+		if (cmdParser.HasKey(L"share"))
+		{
+			settings.targetShare = cmdParser.GetVal(L"share");
+			if (settings.targetShare.IsEmpty())
+				Log(L"-share missing value", true);
+		}
+
 #ifdef _DEBUG
 		gbODS = true;
 #endif
@@ -223,7 +230,8 @@ PerServerCleanup:
 					if(settings.bNeedToDeleteServiceFile)
 						DeletePAExecFromRemote(*cItr, settings);
 					if(settings.bNeedToDetachFromAdmin)
-						EstablishConnection(settings, *cItr, L"ADMIN$", false);
+						//EstablishConnection(settings, *cItr, L"ADMIN$", false);
+						EstablishConnection(settings, *cItr, settings.targetShare, false);
 					if(settings.bNeedToDetachFromIPC)
 						EstablishConnection(settings, *cItr, L"IPC$", false);
 					if(false == gbStop) //if stopping, just bail -- the OS will close these (and some of them might be invalid now anyway)

@@ -43,7 +43,7 @@ bool EstablishConnection(Settings& settings, LPCTSTR lpszRemote, LPCTSTR lpszRes
 				if(NULL != wcsstr(lpszResource, L"IPC$"))
 					settings.bNeedToDetachFromIPC = false;
 				else
-					if(NULL != wcsstr(lpszResource, L"ADMIN$"))
+					if(NULL != wcsstr(lpszResource, settings.targetShare))
 						settings.bNeedToDetachFromAdmin = false;
 					else
 						_ASSERT(0);
@@ -64,7 +64,7 @@ bool EstablishConnection(Settings& settings, LPCTSTR lpszRemote, LPCTSTR lpszRes
 			if(NULL != wcsstr(lpszResource, L"IPC$"))
 				settings.bNeedToDetachFromIPC = true;
 			else
-				if(NULL != wcsstr(lpszResource, L"ADMIN$"))
+				if(NULL != wcsstr(lpszResource, settings.targetShare))
 					settings.bNeedToDetachFromAdmin = true;
 				else
 					_ASSERT(0);
@@ -76,7 +76,7 @@ bool EstablishConnection(Settings& settings, LPCTSTR lpszRemote, LPCTSTR lpszRes
 			if(NULL != wcsstr(lpszResource, L"IPC$"))
 				settings.bNeedToDetachFromIPC = false;
 			else
-				if(NULL != wcsstr(lpszResource, L"ADMIN$"))
+				if(NULL != wcsstr(lpszResource, settings.targetShare))
 					settings.bNeedToDetachFromAdmin = false;
 				else
 					_ASSERT(0);
@@ -95,7 +95,7 @@ void DeletePAExecFromRemote(LPCWSTR targetComputer, Settings& settings)
 	wchar_t myPath[_MAX_PATH * 2] = {0};
 	GetModuleFileName(NULL, myPath, sizeof(myPath)/sizeof(wchar_t));
 	LPCWSTR pFileName = wcsrchr(myPath, L'\\');
-	CString dest = StrFormat(L"\\\\%s\\ADMIN$\\%s", targetComputer, GetRemoteServiceName(settings) + CString(L".exe"));
+	CString dest = StrFormat(L"\\\\%s\\%s\\%s", targetComputer, settings.targetShare, GetRemoteServiceName(settings) + CString(L".exe"));
 	if(0 == wcscmp(targetComputer, L"."))
 	{
 		//change to local system32 directory
@@ -123,7 +123,7 @@ bool CopyPAExecToRemote(Settings& settings, LPCWSTR targetComputer)
 {
 	CString remoteExeName = GetRemoteServiceName(settings);
 	remoteExeName += L".exe";
-	CString dest = StrFormat(L"\\\\%s\\ADMIN$\\%s", targetComputer, remoteExeName);
+	CString dest = StrFormat(L"\\\\%s\\%s\\%s", targetComputer, settings.targetShare, remoteExeName);
 
 	wchar_t myPath[_MAX_PATH * 2] = {0};
 	GetModuleFileName(NULL, myPath, ARRAYSIZE(myPath));
@@ -146,7 +146,7 @@ bool CopyPAExecToRemote(Settings& settings, LPCWSTR targetComputer)
 			return false;
 
 		//try attaching, and then try copy again
-		EstablishConnection(settings, targetComputer, L"ADMIN$", true);
+		EstablishConnection(settings, targetComputer, settings.targetShare, true);
 
 		if(gbStop)
 			return false;
@@ -287,7 +287,7 @@ bool InstallAndStartRemoteService(LPCWSTR remoteServer, Settings& settings)
 		if( ((DWORD)-1 != settings.sessionToInteractWith) || (settings.bInteractive) )
 			serviceType |= SERVICE_INTERACTIVE_PROCESS;
 
-		CString svcExePath = StrFormat(L"%%SystemRoot%%\\%s.exe", remoteServiceName);
+		CString svcExePath = StrFormat(L"%s\\%s.exe", settings.targetSharePath, remoteServiceName);
 		if(NULL == remoteServer)
 		{
 			GetWindowsDirectory(svcExePath.GetBuffer(_MAX_PATH * 2), _MAX_PATH * 2);
@@ -614,7 +614,7 @@ bool SendFilesToRemote(LPCWSTR remoteServer, Settings& settings, HANDLE& hPipe)
 		{
 			CString src = (*itr).fullFilePath;
 			_ASSERT(FALSE == src.IsEmpty());
-			CString dest = StrFormat(L"\\\\%s\\ADMIN$\\PAExec_Move%u.dat", remoteServer, index);
+			CString dest = StrFormat(L"\\\\%s\\%s\\PAExec_Move%u.dat", remoteServer, settings.targetShare, index);
 
 			if(0 == wcscmp(remoteServer, L"."))
 			{
@@ -630,7 +630,7 @@ bool SendFilesToRemote(LPCWSTR remoteServer, Settings& settings, HANDLE& hPipe)
 					return false;
 
 				//try attaching, and then try copy again
-				EstablishConnection(settings, remoteServer, L"ADMIN$", true);
+				EstablishConnection(settings, remoteServer, settings.targetShare, true);
 
 				if(gbStop)
 					return false;

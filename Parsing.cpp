@@ -217,6 +217,8 @@ CommandList gSupportedCommands[] =
 	{L"to", true, true},
 	{L"noname", false, false},
 	{L"sname", true, true},
+	{L"share", true, true},
+	{L"sharepath", true, true},
 	{L"accepteula", false, false} //non-documented PSExec command that we'll just silently eat
 };
 
@@ -546,6 +548,14 @@ bool ParseCommandLine(Settings& settings, LPCWSTR cmdLine)
 			settings.bNoName = true;
 		else if (cmdParser.HasKey(L"sname"))
 			settings.serviceName = cmdParser.GetVal(L"sname");
+
+		if (cmdParser.HasKey(L"share")) {
+			settings.targetShare = cmdParser.GetVal(L"share");
+			if (cmdParser.HasKey(L"sharepath")) {
+				settings.targetSharePath = cmdParser.GetVal(L"sharepath");
+			}
+		}
+			
 
 		if(cmdParser.HasKey(L"csrc"))
 		{
