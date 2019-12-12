@@ -165,6 +165,8 @@ public:
 		timeoutSeconds = 0;
 		bNoName = false;
 		sessionToInteractWith = (DWORD)-1; //not initialized
+		targetShare = L"ADMIN$";
+		targetSharePath = L"%SYSTEMROOT%";
 	}
 
 	void Serialize(RemMsg& msg, bool bSave)
@@ -338,6 +340,8 @@ public:
 	bool bNeedToDeleteService;
 	bool bNoName;
 	CString serviceName;
+	CString targetShare;
+	CString targetSharePath;
 };
 
 class ListenParam
