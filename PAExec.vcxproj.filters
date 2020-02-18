@@ -67,5 +67,11 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="Usage.txt" />
+    <Text Include="regression1.txt">
+      <Filter>Source Files</Filter>
+    </Text>
+    <Text Include="regression2.txt">
+      <Filter>Source Files</Filter>
+    </Text>
   </ItemGroup>
 </Project>
