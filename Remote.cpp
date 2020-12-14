@@ -332,8 +332,10 @@ bool InstallAndStartRemoteService(LPCWSTR remoteServer, Settings& settings)
 	if (BAD_HANDLE(hService))
 	{
 		DWORD serviceType = SERVICE_WIN32_OWN_PROCESS;
-		if( ((DWORD)-1 != settings.sessionToInteractWith) || (settings.bInteractive) )
-			serviceType |= SERVICE_INTERACTIVE_PROCESS;
+		
+		//as of Vista, services can no longer be interacted with
+		//if( ((DWORD)-1 != settings.sessionToInteractWith) || (settings.bInteractive) )
+		//	serviceType |= SERVICE_INTERACTIVE_PROCESS;
 
 		CString svcExePath = StrFormat(L"%s\\%s.exe", settings.targetSharePath, remoteServiceName);
 		if(NULL == remoteServer)
