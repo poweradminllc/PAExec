@@ -117,6 +117,13 @@ void DeletePAExecFromRemote(LPCWSTR targetComputer, Settings& settings)
 		Log(StrFormat(L"Failed to cleanup [%s] on %s.", dest, targetComputer), gle);
 		break;
 	}
+	
+	if (!BAD_HANDLE(settings.hUserImpersonated))
+	{
+		::RevertToSelf();
+		::CloseHandle(settings.hUserImpersonated);
+		settings.hUserImpersonated = INVALID_HANDLE_VALUE;
+	}
 }
 
 bool CopyPAExecToRemote(Settings& settings, LPCWSTR targetComputer)
@@ -247,6 +254,23 @@ void StopAndDeleteRemoteService(LPCWSTR remoteServer, Settings& settings)
 	::CloseServiceHandle(hSCM);
 }
 
+// Strips the domain name from an user name string, if given as domain\user or user@domain
+CString RemoveDomainFromUserName(CString user)
+{
+	CString ret = user;
+	int idx = user.Find(L"\\");
+	if (idx != -1)
+	{
+		ret.Delete(0, idx + 1);
+	}
+	idx = user.Find(L"@");
+	if (idx != -1)
+	{
+		ret = ret.Left(idx);
+	}
+	return ret;
+}
+
 // Installs and starts the remote service on remote machine
 bool InstallAndStartRemoteService(LPCWSTR remoteServer, Settings& settings)
 {
@@ -267,12 +291,36 @@ bool InstallAndStartRemoteService(LPCWSTR remoteServer, Settings& settings)
 		gle = GetLastError();
 	}
 
+	if (BAD_HANDLE(hSCM))
+	{
+		Log(StrFormat(L"Failed to connect to Service Control Manager on %s. Will try alternate method.", remoteServer ? remoteServer : L"{local computer}"), gle);
+	}
+	
 	if(gbStop)
 		return false;
 
 	if (BAD_HANDLE(hSCM))
 	{
-		Log(StrFormat(L"Failed to connect to Service Control Manager on %s.", remoteServer ? remoteServer : L"{local computer}"), gle);
+		// If the above fails, we try a different approach that includes impersonation.
+		// This seems to happen if we do not have admin rights locally when starting a remote process.
+		// See https://docs.microsoft.com/de-de/windows/win32/api/winsvc/nf-winsvc-openscmanagera?redirectedfrom=MSDN
+		CString strippedUser = RemoveDomainFromUserName(settings.user);
+		// This fails if we specify a domain here
+		bool success = ::LogonUserW(strippedUser, NULL, settings.password, LOGON32_LOGON_NEW_CREDENTIALS, LOGON32_PROVIDER_WINNT50, &settings.hUserImpersonated);
+		if (!success || BAD_HANDLE(settings.hUserImpersonated))
+		{
+			gle = GetLastError();
+			Log(StrFormat(L"Failed to log on as remote user %s.", strippedUser.GetString()), gle);
+			return false;
+		}
+		::ImpersonateLoggedOnUser(settings.hUserImpersonated);
+		hSCM = ::OpenSCManager(remoteServer, NULL, SC_MANAGER_ALL_ACCESS);
+		gle = GetLastError();
+	}
+
+	if (BAD_HANDLE(hSCM))
+	{
+		Log(StrFormat(L"Failed to impersonate to open Service Control Manager on %s.", remoteServer ? remoteServer : L"{local computer}"), gle);
 		return false;
 	}
 
@@ -331,7 +379,7 @@ bool InstallAndStartRemoteService(LPCWSTR remoteServer, Settings& settings)
 		}
 		settings.bNeedToDeleteService = true;
 	}
-	
+
 	::CloseServiceHandle(hService);
 	::CloseServiceHandle(hSCM);
 

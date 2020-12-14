@@ -150,6 +150,7 @@ public:
 		hProcess = INVALID_HANDLE_VALUE;
 		hUserProfile = INVALID_HANDLE_VALUE; //call UnloadUserProfile when done
 		hUser = INVALID_HANDLE_VALUE;
+		hUserImpersonated = INVALID_HANDLE_VALUE;
 		bDisableFileRedirection = false;
 		bODS = false;
 		hStdOut = INVALID_HANDLE_VALUE;
@@ -330,6 +331,7 @@ public:
 	DWORD processID;
 	HANDLE hUserProfile; //call UnloadUserProfile when done
 	HANDLE hUser;
+	HANDLE hUserImpersonated;
 	CString localLogPath;
 	HANDLE hStdOut;
 	HANDLE hStdIn;
