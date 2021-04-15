@@ -262,6 +262,7 @@ UINT WINAPI ListenRemoteStdInputPipeThread(void* p)
 	DWORD nBytesWrote = 0;
 
 	HANDLE hWritePipe = CreateEvent(NULL, TRUE, FALSE, NULL);
+	HANDLE hReadEvt = CreateEvent(NULL, TRUE, FALSE, NULL);
 
 	DWORD oldMode = 0;
 	GetConsoleMode(hInput, &oldMode);
@@ -270,8 +271,12 @@ UINT WINAPI ListenRemoteStdInputPipeThread(void* p)
 
 	bool bWaitForKeyPress = true;
 	//detect if input redirected from file (in which case we don't want to wait for keyboard hits)
-	DWORD inputSize = GetFileSize(hInput, NULL);
-	if(INVALID_FILE_SIZE != inputSize)
+	
+	//DWORD inputSize = GetFileSize(hInput, NULL);
+	//if(INVALID_FILE_SIZE != inputSize)
+	//	bWaitForKeyPress = false;
+	DWORD fileType = GetFileType(hInput);
+	if (FILE_TYPE_CHAR != fileType) 
 		bWaitForKeyPress = false;
 
 	while(false == gbStop)
@@ -293,12 +298,39 @@ UINT WINAPI ListenRemoteStdInputPipeThread(void* p)
 		}
 
 		nBytesRead = 0;
-		//if ( !ReadConsole( hInput, szInputBuffer, SIZEOF_BUFFER, &nBytesRead, NULL ) ) -- returns UNICODE which is not what we want
-		if (!ReadFile( hInput, szInputBuffer, SIZEOF_BUFFER - 1, &nBytesRead, NULL))
+
+		if (FILE_TYPE_PIPE == fileType) 
 		{
-			DWORD dwErr = GetLastError();
-			if ( dwErr == ERROR_NO_DATA)
+			OVERLAPPED olR = { 0 };
+			olR.hEvent = hReadEvt;
+			if (!ReadFile(hInput, szInputBuffer, SIZEOF_BUFFER - 1, &nBytesRead, &olR) || (nBytesRead == 0))
+			{
+				DWORD dwErr = GetLastError();
+				if (dwErr == ERROR_NO_DATA)
+					break;
+			}
+
+			if (gbStop)
 				break;
+
+			HANDLE waits[2];
+			waits[0] = pLP->hStop;
+			waits[1] = olR.hEvent;
+			DWORD ret = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+			if (ret == WAIT_OBJECT_0)
+				break; //need to exit
+			_ASSERT(ret == WAIT_OBJECT_0 + 1); //data in buffer now
+			GetOverlappedResult(hInput, &olR, &nBytesRead, FALSE);
+		}
+		else 
+		{
+			//if ( !ReadConsole( hInput, szInputBuffer, SIZEOF_BUFFER, &nBytesRead, NULL ) ) -- returns UNICODE which is not what we want
+			if (!ReadFile(hInput, szInputBuffer, SIZEOF_BUFFER - 1, &nBytesRead, NULL))
+			{
+				DWORD dwErr = GetLastError();
+				if (dwErr == ERROR_NO_DATA)
+					break;
+			}
 		}
 
 		if(gbStop)
@@ -338,6 +370,7 @@ UINT WINAPI ListenRemoteStdInputPipeThread(void* p)
 	} 
 	
 	CloseHandle(hWritePipe);
+	CloseHandle(hReadEvt);
 
 	SetConsoleMode(hInput, oldMode);
 

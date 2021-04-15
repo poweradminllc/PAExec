@@ -213,3 +213,5 @@ pip-log.txt
 
 #Mr Developer
 .mr.developer.cfg
+.vs/PAExec/v15/Browse.VC.db
+.vs/PAExec/v15/Browse.VC.opendb

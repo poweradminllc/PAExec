@@ -433,6 +433,46 @@ bool ReadTextFile(LPCWSTR fileName, CString& content)
 }
 
 
+void SplitUserNameAndDomain(CString user, CString& username, CString& domain)
+{
+	//defaults
+	username = user;
+	domain = L"";
+
+	int idx = user.Find(L"\\");
+	if (idx != -1)
+	{
+		domain = user.Left(idx);
+		username = user.Right(user.GetLength() - (idx + 1));
+	}
+	else
+	{
+		idx = user.Find(L"@");
+		if (idx != -1)
+		{
+			username = user.Left(idx);
+			domain = user.Right(user.GetLength() - (idx + 1));
+		}
+	}
+}
+
+// Strips the domain name from an user name string, if given as domain\user or user@domain
+CString RemoveDomainFromUserName(CString user)
+{
+	CString ret = user;
+	int idx = user.Find(L"\\");
+	if (idx != -1)
+	{
+		ret.Delete(0, idx + 1);
+	}
+	else
+	{
+		idx = user.Find(L"@");
+		if (idx != -1)
+			ret = ret.Left(idx);
+	}
+	return ret;
+}
 
 #ifdef _DEBUG
 

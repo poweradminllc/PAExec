@@ -129,7 +129,7 @@ bool GetUserHandle(Settings& settings, BOOL& bLoadedProfile, PROFILEINFO& profil
 #endif
 			if((FALSE == bLoggedIn) || BAD_HANDLE(settings.hUser))
 			{
-				Log(StrFormat(L"Error logging in as %s", settings.user), gle);
+				Log(StrFormat(L"Error logging in as %s.", settings.user), gle);
 				return false;
 			}
 			else
@@ -206,6 +206,8 @@ bool StartProcess(Settings& settings, HANDLE hCmdPipe)
 	si.cb = sizeof(si);
 	si.dwFlags = STARTF_USESHOWWINDOW;
 	si.wShowWindow = SW_SHOW;
+	if(!settings.bInteractive)
+		si.wShowWindow = SW_HIDE;
 	if(!BAD_HANDLE(settings.hStdErr))
 	{
 		si.hStdError = settings.hStdErr;

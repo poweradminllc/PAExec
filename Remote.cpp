@@ -7,6 +7,8 @@ volatile long gInProcessRequests = 0;
 
 extern CString gLogPath;
 CString GetRemoteServiceName(Settings& settings);
+void SplitUserNameAndDomain(CString user, CString& username, CString& domain);
+CString RemoveDomainFromUserName(CString user);
 
 bool EstablishConnection(Settings& settings, LPCTSTR lpszRemote, LPCTSTR lpszResource, bool bConnect)
 {
@@ -15,6 +17,18 @@ bool EstablishConnection(Settings& settings, LPCTSTR lpszRemote, LPCTSTR lpszRes
 		return true; //already connected to self
 
 	CString remoteResource = StrFormat(L"\\\\%s\\%s", lpszRemote, lpszResource);
+
+	if((INVALID_HANDLE_VALUE == settings.hUserImpersonated) && (FALSE == settings.user.IsEmpty()))
+	{
+		CString user, domain;
+		SplitUserNameAndDomain(settings.user, user, domain);
+		bool success = ::LogonUserW(user, domain.IsEmpty() ? NULL : domain, settings.password, LOGON32_LOGON_NEW_CREDENTIALS, LOGON32_PROVIDER_WINNT50, &settings.hUserImpersonated);
+		if (!success || BAD_HANDLE(settings.hUserImpersonated))
+		{
+			DWORD gle = GetLastError();
+			Log(StrFormat(L"Failed to log on as remote user %s.", settings.user.GetString()), gle);
+		}
+	}
 
 	if(bConnect)
 	{
@@ -92,9 +106,6 @@ bool EstablishConnection(Settings& settings, LPCTSTR lpszRemote, LPCTSTR lpszRes
 
 void DeletePAExecFromRemote(LPCWSTR targetComputer, Settings& settings)
 {
-	wchar_t myPath[_MAX_PATH * 2] = {0};
-	GetModuleFileName(NULL, myPath, sizeof(myPath)/sizeof(wchar_t));
-	LPCWSTR pFileName = wcsrchr(myPath, L'\\');
 	CString dest = StrFormat(L"\\\\%s\\%s\\%s", targetComputer, settings.targetShare, GetRemoteServiceName(settings) + CString(L".exe"));
 	if(0 == wcscmp(targetComputer, L"."))
 	{
@@ -104,6 +115,9 @@ void DeletePAExecFromRemote(LPCWSTR targetComputer, Settings& settings)
 		dest += L"\\";
 		dest += GetRemoteServiceName(settings) + CString(L".exe");
 	}
+
+	if(NULL != settings.hUserImpersonated)
+		ImpersonateLoggedOnUser(settings.hUserImpersonated);
 
 	int tryCount = 0;
 	while(FALSE == DeleteFile(dest))
@@ -116,13 +130,6 @@ void DeletePAExecFromRemote(LPCWSTR targetComputer, Settings& settings)
 		}
 		Log(StrFormat(L"Failed to cleanup [%s] on %s.", dest, targetComputer), gle);
 		break;
-	}
-	
-	if (!BAD_HANDLE(settings.hUserImpersonated))
-	{
-		::RevertToSelf();
-		::CloseHandle(settings.hUserImpersonated);
-		settings.hUserImpersonated = INVALID_HANDLE_VALUE;
 	}
 }
 
@@ -147,27 +154,34 @@ bool CopyPAExecToRemote(Settings& settings, LPCWSTR targetComputer)
 	if(0 == _wcsicmp(myPath, dest))
 		return true; //don't need to copy -- running from there
 
+	//try to use the credentials we were given (if any) so we don't try default credentials which might log in the Event Log
+	if((FALSE == settings.user.IsEmpty()) && (false == settings.bNeedToDetachFromAdmin))
+		EstablishConnection(settings, targetComputer, settings.targetShare, true);
+	
+	if(NULL != settings.hUserImpersonated)
+	{
+		BOOL b = ImpersonateLoggedOnUser(settings.hUserImpersonated);
+		DWORD gle = GetLastError();
+		if(FALSE == b)
+			Log(StrFormat(L"Failed to impersonate [%s] - continuing anyway.", settings.user), gle);
+	}
+
+	//trying really hard above to not get failed logins in the Event Log but CopyFile seems intent on trying other connections besides what we've provided :(
 	if((FALSE == CopyFile(myPath, dest, FALSE)) && (false == settings.bNeedToDetachFromAdmin))
 	{
-		if(gbStop)
-			return false;
+		DWORD gle = GetLastError();
 
-		//try attaching, and then try copy again
-		EstablishConnection(settings, targetComputer, settings.targetShare, true);
+		if (NULL != settings.hUserImpersonated)
+			RevertToSelf();
 
-		if(gbStop)
-			return false;
-
-		if(FALSE == CopyFile(myPath, dest, FALSE))
-		{
-			DWORD gle = GetLastError();
-			Log(StrFormat(L"Failed to copy [%s] to [%s] -- going to try to continue anyway.", myPath, dest), gle);
-		}
-		else
-			settings.bNeedToDeleteServiceFile = true;
+		Log(StrFormat(L"Failed to copy [%s] to [%s] -- going to try to continue anyway.", myPath, dest), gle);
 	}
 	else
+	{
+		if (NULL != settings.hUserImpersonated)
+			RevertToSelf();
 		settings.bNeedToDeleteServiceFile = true;
+	}
 
 	return true;
 }
@@ -197,19 +211,19 @@ void StopAndDeleteRemoteService(LPCWSTR remoteServer, Settings& settings)
 	if(0 == wcscmp(remoteServer, L"."))
 		remoteServer = NULL;
 
+	//should already have a connection if one was needed
+	if(NULL != settings.hUserImpersonated)
+		ImpersonateLoggedOnUser(settings.hUserImpersonated);
+
+	if(NULL != settings.hUserImpersonated)
+		ImpersonateLoggedOnUser(settings.hUserImpersonated);
+
 	SC_HANDLE hSCM = ::OpenSCManager(remoteServer, NULL, SC_MANAGER_ALL_ACCESS);
-	
-	DWORD gle = 0;
-	if(BAD_HANDLE(hSCM) && (false == settings.bNeedToDetachFromIPC))
-	{
-		//try attaching, and then try open again
-		EstablishConnection(settings, remoteServer, L"IPC$", true);
-		hSCM = ::OpenSCManager(remoteServer, NULL, SC_MANAGER_ALL_ACCESS);
-		gle = GetLastError();
-	}
+	DWORD gle = GetLastError();
 
 	if (BAD_HANDLE(hSCM))
 	{
+		RevertToSelf();
 		Log(StrFormat(L"Failed to connect to Service Control Manager on %s.  Can't cleanup PAExec.", remoteServer ? remoteServer : L"{local computer}"), gle);
 		return;
 	}
@@ -252,24 +266,10 @@ void StopAndDeleteRemoteService(LPCWSTR remoteServer, Settings& settings)
 		::CloseServiceHandle(hService);
 	}
 	::CloseServiceHandle(hSCM);
+
+	RevertToSelf();
 }
 
-// Strips the domain name from an user name string, if given as domain\user or user@domain
-CString RemoveDomainFromUserName(CString user)
-{
-	CString ret = user;
-	int idx = user.Find(L"\\");
-	if (idx != -1)
-	{
-		ret.Delete(0, idx + 1);
-	}
-	idx = user.Find(L"@");
-	if (idx != -1)
-	{
-		ret = ret.Left(idx);
-	}
-	return ret;
-}
 
 // Installs and starts the remote service on remote machine
 bool InstallAndStartRemoteService(LPCWSTR remoteServer, Settings& settings)
@@ -277,50 +277,30 @@ bool InstallAndStartRemoteService(LPCWSTR remoteServer, Settings& settings)
 	if(0 == wcscmp(remoteServer, L"."))
 		remoteServer = NULL;
 
+	//try to use given credentials (if any) so we don't try and connect using default user credentials 
+	if((FALSE == settings.user.IsEmpty()) && ((false == settings.bNeedToDetachFromIPC) || (INVALID_HANDLE_VALUE == settings.hUserImpersonated)) )
+		EstablishConnection(settings, remoteServer, L"IPC$", true);
+
+	if(NULL != settings.hUserImpersonated)
+		ImpersonateLoggedOnUser(settings.hUserImpersonated);
+
 	SC_HANDLE hSCM = ::OpenSCManager(remoteServer, NULL, SC_MANAGER_ALL_ACCESS);
 	DWORD gle = GetLastError();
-
+	
 	if(gbStop)
-		return false;
-
-	if(BAD_HANDLE(hSCM) && (false == settings.bNeedToDetachFromIPC))
 	{
-		//try attaching, and then try open again
-		EstablishConnection(settings, remoteServer, L"IPC$", true);
-		hSCM = ::OpenSCManager(remoteServer, NULL, SC_MANAGER_ALL_ACCESS);
-		gle = GetLastError();
+		RevertToSelf();
+		return false;
 	}
 
 	if (BAD_HANDLE(hSCM))
 	{
-		Log(StrFormat(L"Failed to connect to Service Control Manager on %s. Will try alternate method.", remoteServer ? remoteServer : L"{local computer}"), gle);
+		Log(StrFormat(L"Failed to connect to Service Control Manager on %s.", remoteServer ? remoteServer : L"{local computer}"), gle);
 	}
 	
 	if(gbStop)
-		return false;
-
-	if (BAD_HANDLE(hSCM))
 	{
-		// If the above fails, we try a different approach that includes impersonation.
-		// This seems to happen if we do not have admin rights locally when starting a remote process.
-		// See https://docs.microsoft.com/de-de/windows/win32/api/winsvc/nf-winsvc-openscmanagera?redirectedfrom=MSDN
-		CString strippedUser = RemoveDomainFromUserName(settings.user);
-		// This fails if we specify a domain here
-		bool success = ::LogonUserW(strippedUser, NULL, settings.password, LOGON32_LOGON_NEW_CREDENTIALS, LOGON32_PROVIDER_WINNT50, &settings.hUserImpersonated);
-		if (!success || BAD_HANDLE(settings.hUserImpersonated))
-		{
-			gle = GetLastError();
-			Log(StrFormat(L"Failed to log on as remote user %s.", strippedUser.GetString()), gle);
-			return false;
-		}
-		::ImpersonateLoggedOnUser(settings.hUserImpersonated);
-		hSCM = ::OpenSCManager(remoteServer, NULL, SC_MANAGER_ALL_ACCESS);
-		gle = GetLastError();
-	}
-
-	if (BAD_HANDLE(hSCM))
-	{
-		Log(StrFormat(L"Failed to impersonate to open Service Control Manager on %s.", remoteServer ? remoteServer : L"{local computer}"), gle);
+		RevertToSelf();
 		return false;
 	}
 
@@ -361,13 +341,17 @@ bool InstallAndStartRemoteService(LPCWSTR remoteServer, Settings& settings)
 		{
 			::CloseServiceHandle(hSCM);
 			Log(StrFormat(L"Failed to install service on %s", remoteServer ? remoteServer : L"{local computer}"), gle);
+			RevertToSelf();
 			return false;
 		}
 		settings.bNeedToDeleteService = true;
 	}
 
 	if(gbStop)
+	{
+		RevertToSelf();
 		return false;
+	}
 
 	if(!StartService(hService, 0, NULL))
 	{
@@ -377,6 +361,7 @@ bool InstallAndStartRemoteService(LPCWSTR remoteServer, Settings& settings)
 			::CloseServiceHandle(hService);
 			::CloseServiceHandle(hSCM);
 			Log(StrFormat(L"Failed to start service on %s", remoteServer ? remoteServer : L"{local computer}"), gle);
+			RevertToSelf();
 			return false;
 		}
 		settings.bNeedToDeleteService = true;
@@ -384,6 +369,8 @@ bool InstallAndStartRemoteService(LPCWSTR remoteServer, Settings& settings)
 
 	::CloseServiceHandle(hService);
 	::CloseServiceHandle(hSCM);
+
+	RevertToSelf();
 
 	return true;
 }
@@ -674,24 +661,23 @@ bool SendFilesToRemote(LPCWSTR remoteServer, Settings& settings, HANDLE& hPipe)
 				dest += StrFormat(L"\\PAExec_Move%u.dat", index);
 			}
 
-			if(FALSE == CopyFile(src, dest, FALSE))
-			{
-				if(gbStop)
-					return false;
-
-				//try attaching, and then try copy again
+			//make connection if we haven't already and credentials were given
+			if ((FALSE == settings.user.IsEmpty()) && ((false == settings.bNeedToDetachFromAdmin) || (NULL == settings.hUserImpersonated)))
 				EstablishConnection(settings, remoteServer, settings.targetShare, true);
 
-				if(gbStop)
-					return false;
+			if(NULL != settings.hUserImpersonated)
+				ImpersonateLoggedOnUser(settings.hUserImpersonated);
 
-				if(FALSE == CopyFile(src, dest, FALSE))
-				{
-					DWORD gle = GetLastError();
-					Log(StrFormat(L"Failed to copy [%s] to [%s].", src, dest), gle);
-					return false;
-				}
+			if(FALSE == CopyFile(src, dest, FALSE))
+			{
+				DWORD gle = GetLastError();
+				
+				RevertToSelf();
+
+				Log(StrFormat(L"Failed to copy [%s] to [%s].", src, dest), gle);
+				return false;
 			}
+			RevertToSelf();
 		}
 	}
 
