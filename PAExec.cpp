@@ -19,6 +19,10 @@
 
 ////////////////////////////////////////////////////////////////////////
 //
+//v1.30 - Feb 2, 2023
+//    Tried to make interactive work better.  Works OK if no username/password is given, and if running as the system account is wanted, but
+//    still doesn't work well when credentials are given.
+//
 //v1.29 - April 14, 2021
 //    will connect with given credentials before automatically trying file copy and service installation
 //    support redirected input from file
@@ -335,7 +339,7 @@ void PrintCopyright()
 		verInfo = NULL;
 	}
 
-	Log(StrFormat(L"\r\nPAExec %s - Execute Programs Remotely\r\nCopyright (c) 2012-2021 Power Admin LLC\r\nwww.poweradmin.com/PAExec\r\n", ver), false);
+	Log(StrFormat(L"\r\nPAExec %s - Execute Programs Remotely\r\nCopyright (c) 2012-2023 Power Admin LLC\r\nwww.poweradmin.com/PAExec\r\n", ver), false);
 }
 
 

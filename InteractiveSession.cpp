@@ -51,7 +51,7 @@ BOOL RunningAsLocalSystem();
 
 void CleanUpInteractiveProcess(CleanupInteractive* pCI) 
 {
-	SetTokenInformation(pCI->hUser, TokenSessionId, &pCI->origSessionID, sizeof(pCI->origSessionID));
+	//SetTokenInformation(pCI->hUser, TokenSessionId, &pCI->origSessionID, sizeof(pCI->origSessionID));
 
 	//// Allow logon SID full access to interactive window station.
 	//RemoveAceFromWindowStation(hwinsta, pSid);
@@ -74,47 +74,83 @@ void CleanUpInteractiveProcess(CleanupInteractive* pCI)
 	//hdesk = NULL;
 }
 
-BOOL PrepForInteractiveProcess(Settings& settings, CleanupInteractive* pCI, DWORD sessionID) 
+BOOL CALLBACK EnumWindowStationsProc(LPWSTR lpszWindowStation, LPARAM lParam)
 {
+	Log(StrFormat(L"Seen winstation: %s", lpszWindowStation), (DWORD)0);
+	return TRUE;
+}
+
+
+BOOL PrepForInteractiveProcess(Settings& settings, CleanupInteractive* pCI) 
+{
+	EnablePrivilege(SE_TCB_NAME, NULL);
+
 	pCI->bPreped = true;
-	//settings.hUser is set as the -u user, Local System (from -s) or as the account the user originally launched PAExec with
+
+	//settings.hUser is already set as the -u user, Local System (from -s) or as the account the user originally launched PAExec with
 
 	//figure out which session we need to go into
-	Duplicate(settings.hUser, __FILE__, __LINE__);
-	pCI->hUser = settings.hUser;
-
-	DWORD targetSessionID = sessionID;
-
 	if((DWORD)-1 == settings.sessionToInteractWith)
 	{
-		targetSessionID = GetInteractiveSessionID();
-		Log(StrFormat(L"Using SessionID %u (interactive session)", targetSessionID), false);
+		settings.sessionToInteractWith = GetInteractiveSessionID();
+		Log(StrFormat(L"Using SessionID %u (interactive session)", settings.sessionToInteractWith), false);
 	}
 	else
-		Log(StrFormat(L"Using SessionID %u from params", targetSessionID), false);
+		Log(StrFormat(L"Using SessionID %u from params", settings.sessionToInteractWith), false);
 
-	//if(FALSE == WTSQueryUserToken(targetSessionID, &settings.hUser))
-	//	Log(L"Failed to get user from session ", GetLastError());
+	if (settings.user.IsEmpty())
+	{
+		if(settings.bUseSystemAccount)
+		{
+			HANDLE hProcessToken = INVALID_HANDLE_VALUE;
+			OpenProcessToken(GetCurrentProcess(), MAXIMUM_ALLOWED, &hProcessToken);
+			DuplicateTokenToIncreaseRights(hProcessToken, __FILE__, __LINE__);
+			SetTokenInformation(hProcessToken, TokenSessionId, &settings.sessionToInteractWith, sizeof(DWORD));
+			settings.hUser = hProcessToken;
+			return TRUE;
+		}
 
-	//Duplicate(settings.hUser, __FILE__, __LINE__);
+		//no user given, but want interactive, so run as the currently logged in user
+		HANDLE hTmp = INVALID_HANDLE_VALUE;
+		if ((FALSE == WTSQueryUserToken(settings.sessionToInteractWith, &hTmp)) || (INVALID_HANDLE_VALUE == hTmp))
+			Log(StrFormat(L"WTSQueryUserToken failed for session ID %d", settings.sessionToInteractWith), GetLastError());
 
-	DWORD returnedLen = 0;
-	GetTokenInformation(settings.hUser, TokenSessionId, &pCI->origSessionID, sizeof(pCI->origSessionID), &returnedLen);
+		if (INVALID_HANDLE_VALUE != hTmp)
+		{
+			Log(L"Using user from WTSQueryUserToken", (DWORD)0);
+			settings.hUser = hTmp;
+			DuplicateTokenToIncreaseRights(settings.hUser, __FILE__, __LINE__);
+		}
+		return TRUE;
+	}
 
-	EnablePrivilege(SE_TCB_NAME, settings.hUser);
+	//This is the hard case - interactive with a specific user.  Not sure why it doesn't work better
 
-	if(FALSE == SetTokenInformation(settings.hUser, TokenSessionId, &targetSessionID, sizeof(targetSessionID)))
+	DuplicateTokenToIncreaseRights(settings.hUser, __FILE__, __LINE__);
+	pCI->hUser = settings.hUser;
+
+	//DWORD returnedLen = 0;
+	//if(FALSE == GetTokenInformation(settings.hUser, TokenSessionId, &pCI->origSessionID, sizeof(pCI->origSessionID), &returnedLen))
+	//	Log(L"GetTokenInformation failed", GetLastError());
+
+	if(false == EnablePrivilege(SE_TCB_NAME, settings.hUser))
+		Log(L"EnablePrivilege failed", GetLastError());
+
+	if(FALSE == SetTokenInformation(settings.hUser, TokenSessionId, &settings.sessionToInteractWith, sizeof(settings.sessionToInteractWith)))
 		Log(L"Failed to set interactive token", GetLastError());
 
 	return TRUE;
-////START FUNKY STUFF
+
+////START FUNKY STUFF - probably doesn't work because OpenWindowStation will get PAExec's Window Station in session 0, which is not what we want
+
 //	BOOL bResult = FALSE;
 //
 //	HDESK hdesk = NULL;
 //	HWINSTA hwinsta = NULL;
 //	PSID pSid = NULL;
 //	HWINSTA hwinstaSave = NULL;
-//
+//	USEROBJECTFLAGS uof = { 0 };
+//	DWORD needed = 0;
 //
 //	// Save a handle to the caller's current window station.
 //	if ((hwinstaSave = GetProcessWindowStation()) == NULL)
@@ -123,17 +159,27 @@ BOOL PrepForInteractiveProcess(Settings& settings, CleanupInteractive* pCI, DWOR
 //		goto Cleanup;
 //	}
 //
+//	LPCWSTR winStaToUse = L"WinSta0"; 
+//
 //	// Get a handle to the interactive window station.
 //	hwinsta = OpenWindowStation(
-//							_T("winsta0"),                   // the interactive window station 
+//							winStaToUse,            // the interactive window station 
 //							FALSE,                       // handle is not inheritable
-//							READ_CONTROL | WRITE_DAC);   // rights to read/write the DACL
+//							READ_CONTROL | WRITE_DAC | WINSTA_READATTRIBUTES);   // rights to read/write the DACL
 //
 //	if (BAD_HANDLE(hwinsta)) 
 //	{
-//		Log(L"Failed to open winsta0.", GetLastError());
+//		Log(StrFormat(L"Failed to open WinStation %s.", winStaToUse), GetLastError());
+//		EnumWindowStations(EnumWindowStationsProc, NULL);
+//
 //		goto Cleanup;
 //	}
+//
+//	//Some logging
+//	if(GetUserObjectInformation(hwinsta, UOI_FLAGS, &uof, sizeof(uof), &needed))
+//		Log(StrFormat(L"WinStation visible: %d", uof.dwFlags), (DWORD)0);
+//	else
+//		Log(L"GetUserObjectInformation failed", GetLastError());
 //
 //	// To get the correct default desktop, set the caller's 
 //	// window station to the interactive window station.
@@ -195,8 +241,8 @@ BOOL PrepForInteractiveProcess(Settings& settings, CleanupInteractive* pCI, DWOR
 //	bResult = TRUE;
 //
 //Cleanup: 
-//	if (!BAD_HANDLE(hwinstaSave))
-//		SetProcessWindowStation (hwinstaSave);
+////	if (!BAD_HANDLE(hwinstaSave))
+////		SetProcessWindowStation (hwinstaSave);
 //
 //	return bResult;
 }
@@ -1127,7 +1173,7 @@ typedef DWORD (WINAPI *WTSGetActiveConsoleSessionIdProc)(void);
 DWORD GetInteractiveSessionID()
 {
 	// Get the active session ID.
-	DWORD   SessionId = 0;
+	DWORD   SessionId = (DWORD)-1;
 	PWTS_SESSION_INFO pSessionInfo;
 	DWORD   Count = 0;
 
@@ -1136,30 +1182,34 @@ DWORD GetInteractiveSessionID()
 		for (DWORD i = 0; i < Count; i ++)
 		{
 			if (pSessionInfo [i].State == WTSActive)	//Here is
-			{
-				SessionId = pSessionInfo [i].SessionId;
-			}
+				SessionId = pSessionInfo[i].SessionId;
 		}
 		WTSFreeMemory (pSessionInfo);
 	}
 
-	if(0 == SessionId)
+	static WTSGetActiveConsoleSessionIdProc pWTSGetActiveConsoleSessionId = NULL;
+	if(NULL == pWTSGetActiveConsoleSessionId)
 	{
-		static WTSGetActiveConsoleSessionIdProc pWTSGetActiveConsoleSessionId = NULL;
-		if(NULL == pWTSGetActiveConsoleSessionId)
+		HMODULE hMod = LoadLibrary(L"Kernel32.dll"); //GLOK
+		if(NULL != hMod)
 		{
-			HMODULE hMod = LoadLibrary(L"Kernel32.dll"); //GLOK
-			if(NULL != hMod)
-			{
-				pWTSGetActiveConsoleSessionId = (WTSGetActiveConsoleSessionIdProc)GetProcAddress(hMod, "WTSGetActiveConsoleSessionId");
-			}
+			pWTSGetActiveConsoleSessionId = (WTSGetActiveConsoleSessionIdProc)GetProcAddress(hMod, "WTSGetActiveConsoleSessionId");
 		}
-
-		if(NULL != pWTSGetActiveConsoleSessionId) //not supported on Win2K
-			SessionId = pWTSGetActiveConsoleSessionId(); //we fall back on this if needed since it apparently doesn't always work
-		else
-			Log(L"WTSGetActiveConsoleSessionId not supported on this OS", false);
 	}
+
+	if(NULL != pWTSGetActiveConsoleSessionId) //not supported on Win2K
+	{
+		DWORD tmp = pWTSGetActiveConsoleSessionId(); //we fall back on this if needed since it apparently doesn't always work
+		if(0 == SessionId)
+			SessionId = tmp;
+		else
+		{
+			if(tmp != SessionId)
+				Log(StrFormat(L"WTSEnumerateSessions found session ID %u, but WTSGetActiveConsoleSessionId returned %u.  Using %u.", SessionId, tmp, SessionId), (DWORD)0);
+		}
+	}
+	else
+		Log(L"WTSGetActiveConsoleSessionId not supported on this OS", false);
 
 	return SessionId;
 }

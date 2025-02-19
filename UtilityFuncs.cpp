@@ -131,6 +131,9 @@ DWORD wtodw(const wchar_t* num)
 
 CString GetSystemErrorMessage(DWORD lastErrorVal)
 {
+	if(0 == lastErrorVal)
+		return L" OK [Ret=0]";
+
 	CString osErr = _T("Unknown error value. ");
 	const int errSize = 8192;
 	HMODULE hMod = NULL;

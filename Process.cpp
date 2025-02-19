@@ -28,7 +28,7 @@ HANDLE GetLocalSystemProcessToken();
 bool LimitRights(HANDLE& hUser);
 bool ElevateUserToken(HANDLE& hEnvUser);
 
-void Duplicate(HANDLE& h, LPCSTR file, int line)
+void DuplicateTokenToIncreaseRights(HANDLE& h, LPCSTR file, int line)
 {
 	HANDLE hDupe = NULL;
 	if(DuplicateTokenEx(h, MAXIMUM_ALLOWED, NULL, SecurityImpersonation, TokenPrimary, &hDupe))
@@ -110,7 +110,7 @@ bool GetUserHandle(Settings& settings, BOOL& bLoadedProfile, PROFILEINFO& profil
 			else
 				Log(L"Got Local System handle", false);
 
-			Duplicate(settings.hUser, __FILE__, __LINE__);
+			DuplicateTokenToIncreaseRights(settings.hUser, __FILE__, __LINE__);
 		}
 		return true;
 	}
@@ -133,17 +133,15 @@ bool GetUserHandle(Settings& settings, BOOL& bLoadedProfile, PROFILEINFO& profil
 				return false;
 			}
 			else
-				Duplicate(settings.hUser, __FILE__, __LINE__); //gives max rights
+				DuplicateTokenToIncreaseRights(settings.hUser, __FILE__, __LINE__); //gives max rights
 
 			if(!BAD_HANDLE(settings.hUser) && (false == settings.bDontLoadProfile))
 			{
 				EnablePrivilege(SE_RESTORE_NAME);
 				EnablePrivilege(SE_BACKUP_NAME);
 				bLoadedProfile = LoadUserProfile(settings.hUser, &profile);
-#ifdef _DEBUG
-				gle = GetLastError();
-				Log(L"DEBUG: LoadUserProfile", gle);
-#endif
+				if(FALSE == bLoadedProfile)
+					Log(L"Failed to load user profile", GetLastError());
 			}
 			return true;
 		}
@@ -176,7 +174,7 @@ bool GetUserHandle(Settings& settings, BOOL& bLoadedProfile, PROFILEINFO& profil
 			if(FALSE == bOpen)
 				Log(L"Failed to open current user token", GetLastError());
 
-			Duplicate(settings.hUser, __FILE__, __LINE__); //gives max rights
+			DuplicateTokenToIncreaseRights(settings.hUser, __FILE__, __LINE__); //gives max rights
 			RevertToSelf();
 			return !BAD_HANDLE(settings.hUser);
 		}
@@ -206,7 +204,7 @@ bool StartProcess(Settings& settings, HANDLE hCmdPipe)
 	si.cb = sizeof(si);
 	si.dwFlags = STARTF_USESHOWWINDOW;
 	si.wShowWindow = SW_SHOW;
-	if(!settings.bInteractive)
+	if(!(settings.bInteractive || settings.bShowUIOnWinLogon))
 		si.wShowWindow = SW_HIDE;
 	if(!BAD_HANDLE(settings.hStdErr))
 	{
@@ -236,18 +234,27 @@ bool StartProcess(Settings& settings, HANDLE hCmdPipe)
 
 	DWORD launchGLE = 0;
 
+	//do the next two calls BEFORE PrepForInteractiveProcess so the session ID stays set
+	if (settings.bRunLimited)
+		if (false == LimitRights(settings.hUser))
+			return false;
+
+	if (settings.bRunElevated)
+		if (false == ElevateUserToken(settings.hUser))
+			return false;
+
 	CleanupInteractive ci = {0};
 
 	if(settings.bInteractive || settings.bShowUIOnWinLogon)
 	{
-		BOOL b = PrepForInteractiveProcess(settings, &ci, settings.sessionToInteractWith);
+		BOOL b = PrepForInteractiveProcess(settings, &ci);
 		if(FALSE == b)
 			Log(L"Failed to PrepForInteractiveProcess", true);
 
 		if(NULL == si.lpDesktop)
-			si.lpDesktop = L"WinSta0\\Default"; 
+			si.lpDesktop = L"Winsta0\\default";
 		if(settings.bShowUIOnWinLogon)
-			si.lpDesktop = L"winsta0\\Winlogon";
+			si.lpDesktop = L"WinSta0\\Winlogon";
 		//Log(StrFormat(L"Using desktop: %s", si.lpDesktop), false);
 		//http://blogs.msdn.com/b/winsdk/archive/2009/07/14/launching-an-interactive-process-from-windows-service-in-windows-vista-and-later.aspx
 		//indicates desktop names are case sensitive
@@ -270,14 +277,6 @@ bool StartProcess(Settings& settings, HANDLE hCmdPipe)
 	if(settings.bDisableFileRedirection)
 		DisableFileRedirection();
 
-	if(settings.bRunLimited)
-		if(false == LimitRights(settings.hUser))
-			return false;
-
-	if(settings.bRunElevated)
-		if(false == ElevateUserToken(settings.hUser))
-			return false;
-
 	CString user, domain;
 	GetUserDomain(settings.user, user, domain);
 
@@ -288,6 +287,13 @@ bool StartProcess(Settings& settings, HANDLE hCmdPipe)
 #endif
 
 	BOOL bLaunched = FALSE;
+
+	DWORD usingSessionID = (DWORD)-1;
+	DWORD ignored = 0;
+	if (FALSE == GetTokenInformation(settings.hUser, TokenSessionId, &usingSessionID, sizeof(usingSessionID), &ignored))
+		Log(L"GetTokenInformation[2] failed", GetLastError());
+	else
+		Log(StrFormat(L"User token sessionID: %d", usingSessionID), (DWORD)0);
 
 	if(settings.bUseSystemAccount)
 	{
@@ -307,6 +313,7 @@ bool StartProcess(Settings& settings, HANDLE hCmdPipe)
 		EnablePrivilege(SE_INCREASE_QUOTA_NAME);
 		bLaunched = CreateProcessAsUser(settings.hUser, NULL, path.LockBuffer(), NULL, NULL, TRUE, dwFlags, pEnvironment, startingDir, &si, &pi);
 		launchGLE = GetLastError();
+		Log(StrFormat(L"CreateProcessAsUser [sys], PID:%u", pi.dwProcessId), launchGLE);
 		path.UnlockBuffer();
 
 #ifdef _DEBUG
@@ -326,8 +333,19 @@ bool StartProcess(Settings& settings, HANDLE hCmdPipe)
 
 			if(false == settings.bRunLimited)
 			{
-				bLaunched = CreateProcessWithLogonW(user, domain.IsEmpty() ? NULL : domain, settings.password, settings.bDontLoadProfile ? 0 : LOGON_WITH_PROFILE, NULL, path.LockBuffer(), dwFlags, pEnvironment, startingDir, &si, &pi);
-				launchGLE = GetLastError();
+				if(!BAD_HANDLE(settings.hUser))
+				{
+					bLaunched = CreateProcessAsUser(settings.hUser, NULL, path.LockBuffer(), NULL, NULL, TRUE, dwFlags, pEnvironment, startingDir, &si, &pi);
+					launchGLE = GetLastError();
+					Log(StrFormat(L"CreateProcessAsUser, PID:%u", pi.dwProcessId), launchGLE);
+				}
+				else //fall back to old code
+				{
+					bLaunched = CreateProcessWithLogonW(user, domain.IsEmpty() ? NULL : domain, settings.password, settings.bDontLoadProfile ? 0 : LOGON_WITH_PROFILE, NULL, path.LockBuffer(), dwFlags, pEnvironment, startingDir, &si, &pi);
+					launchGLE = GetLastError();
+					Log(StrFormat(L"CreateProcessWithLogonW, PID:%u", pi.dwProcessId), launchGLE);
+				}
+
 				path.UnlockBuffer();
 
 #ifdef _DEBUG
@@ -360,6 +378,12 @@ bool StartProcess(Settings& settings, HANDLE hCmdPipe)
 				bLaunched = CreateProcessAsUser(settings.hUser, NULL, path.LockBuffer(), NULL, NULL, TRUE, CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | CREATE_NEW_CONSOLE, pEnvironment, startingDir, &si, &pi);
 				if(0 == GetLastError())
 					launchGLE = 0; //mark as successful, otherwise return our original error
+				else
+				{
+					DWORD tmp = GetLastError();
+					Log(StrFormat(L"CreateProcessAsUser[2], PID:%u", pi.dwProcessId), tmp);
+				}
+
 				path.UnlockBuffer();
 #ifdef _DEBUG
 				if(0 != launchGLE)
@@ -379,11 +403,18 @@ bool StartProcess(Settings& settings, HANDLE hCmdPipe)
 			EnablePrivilege(SE_IMPERSONATE_NAME);
 
 			if(NULL != settings.hUser)
+			{
 				bLaunched = CreateProcessAsUser(settings.hUser, NULL, path.LockBuffer(), NULL, NULL, TRUE, dwFlags, pEnvironment, startingDir, &si, &pi);
+				launchGLE = GetLastError();
+				Log(StrFormat(L"CreateProcessAsUser[3], PID:%u", pi.dwProcessId), launchGLE);
+			}
 			if(FALSE == bLaunched)
+			{
 				bLaunched = CreateProcess(NULL, path.LockBuffer(), NULL, NULL, TRUE, dwFlags, pEnvironment, startingDir, &si, &pi);
-			launchGLE = GetLastError();
-	
+				launchGLE = GetLastError();
+				Log(StrFormat(L"CreateProcess, PID:%u", pi.dwProcessId), launchGLE);
+			}
+
 //#ifdef _DEBUG
 			if(0 != launchGLE)
 				Log(StrFormat(L"Launch (launchGLE=%u) params: path=[%s] user=[%s], pEnv=[%s], dir=[%s], stdin=[x%X], stdout=[x%X], stderr=[x%X]",
@@ -600,7 +631,7 @@ bool LimitRights(HANDLE& hUser)
 		{
 			VERIFY(CloseHandle(hUser));
 			hUser = hNew;
-			Duplicate(hUser, __FILE__, __LINE__);
+			DuplicateTokenToIncreaseRights(hUser, __FILE__, __LINE__);
 			return true;
 		}
 	}
@@ -624,7 +655,7 @@ bool ElevateUserToken(HANDLE& hEnvUser)
 			TOKEN_LINKED_TOKEN tlt = {0};
 			if(GetTokenInformation(hEnvUser, TokenLinkedToken, (LPVOID)&tlt, sizeof(tlt), &needed))
 			{
-				Duplicate(tlt.LinkedToken, __FILE__, __LINE__);
+				DuplicateTokenToIncreaseRights(tlt.LinkedToken, __FILE__, __LINE__);
 				hEnvUser = tlt.LinkedToken;
 				return true;
 			}

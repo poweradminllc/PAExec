@@ -18,7 +18,7 @@ bool EstablishConnection(Settings& settings, LPCTSTR lpszRemote, LPCTSTR lpszRes
 
 	CString remoteResource = StrFormat(L"\\\\%s\\%s", lpszRemote, lpszResource);
 
-	if((INVALID_HANDLE_VALUE == settings.hUserImpersonated) && (FALSE == settings.user.IsEmpty()))
+	if((BAD_HANDLE(settings.hUserImpersonated)) && (FALSE == settings.user.IsEmpty()))
 	{
 		CString user, domain;
 		SplitUserNameAndDomain(settings.user, user, domain);
@@ -116,7 +116,7 @@ void DeletePAExecFromRemote(LPCWSTR targetComputer, Settings& settings)
 		dest += GetRemoteServiceName(settings) + CString(L".exe");
 	}
 
-	if(NULL != settings.hUserImpersonated)
+	if(!BAD_HANDLE(settings.hUserImpersonated))
 		ImpersonateLoggedOnUser(settings.hUserImpersonated);
 
 	int tryCount = 0;
@@ -158,7 +158,7 @@ bool CopyPAExecToRemote(Settings& settings, LPCWSTR targetComputer)
 	if((FALSE == settings.user.IsEmpty()) && (false == settings.bNeedToDetachFromAdmin))
 		EstablishConnection(settings, targetComputer, settings.targetShare, true);
 	
-	if(NULL != settings.hUserImpersonated)
+	if(!BAD_HANDLE(settings.hUserImpersonated))
 	{
 		BOOL b = ImpersonateLoggedOnUser(settings.hUserImpersonated);
 		DWORD gle = GetLastError();
@@ -171,14 +171,14 @@ bool CopyPAExecToRemote(Settings& settings, LPCWSTR targetComputer)
 	{
 		DWORD gle = GetLastError();
 
-		if (NULL != settings.hUserImpersonated)
+		if (!BAD_HANDLE(settings.hUserImpersonated))
 			RevertToSelf();
 
 		Log(StrFormat(L"Failed to copy [%s] to [%s] -- going to try to continue anyway.", myPath, dest), gle);
 	}
 	else
 	{
-		if (NULL != settings.hUserImpersonated)
+		if (!BAD_HANDLE(settings.hUserImpersonated))
 			RevertToSelf();
 		settings.bNeedToDeleteServiceFile = true;
 	}
@@ -212,10 +212,7 @@ void StopAndDeleteRemoteService(LPCWSTR remoteServer, Settings& settings)
 		remoteServer = NULL;
 
 	//should already have a connection if one was needed
-	if(NULL != settings.hUserImpersonated)
-		ImpersonateLoggedOnUser(settings.hUserImpersonated);
-
-	if(NULL != settings.hUserImpersonated)
+	if(!BAD_HANDLE(settings.hUserImpersonated))
 		ImpersonateLoggedOnUser(settings.hUserImpersonated);
 
 	SC_HANDLE hSCM = ::OpenSCManager(remoteServer, NULL, SC_MANAGER_ALL_ACCESS);
@@ -278,10 +275,10 @@ bool InstallAndStartRemoteService(LPCWSTR remoteServer, Settings& settings)
 		remoteServer = NULL;
 
 	//try to use given credentials (if any) so we don't try and connect using default user credentials 
-	if((FALSE == settings.user.IsEmpty()) && ((false == settings.bNeedToDetachFromIPC) || (INVALID_HANDLE_VALUE == settings.hUserImpersonated)) )
+	if((FALSE == settings.user.IsEmpty()) && ((false == settings.bNeedToDetachFromIPC) || (BAD_HANDLE(settings.hUserImpersonated))) )
 		EstablishConnection(settings, remoteServer, L"IPC$", true);
 
-	if(NULL != settings.hUserImpersonated)
+	if(!BAD_HANDLE(settings.hUserImpersonated))
 		ImpersonateLoggedOnUser(settings.hUserImpersonated);
 
 	SC_HANDLE hSCM = ::OpenSCManager(remoteServer, NULL, SC_MANAGER_ALL_ACCESS);
@@ -613,7 +610,7 @@ void StartRemoteApp(LPCWSTR remoteServer, Settings& settings, HANDLE& hPipe, int
 	{
 		response >> (DWORD&)appExitCode;		
 		if(false == settings.bDontWaitForTerminate)
-			Log(StrFormat(L"%s returned %i", settings.app, appExitCode), false);
+			Log(StrFormat(L"%s returned %d (0x%08X)", settings.app, appExitCode, appExitCode), false);
 		else
 		{
 			//exit code is really PID if not waiting
@@ -662,10 +659,10 @@ bool SendFilesToRemote(LPCWSTR remoteServer, Settings& settings, HANDLE& hPipe)
 			}
 
 			//make connection if we haven't already and credentials were given
-			if ((FALSE == settings.user.IsEmpty()) && ((false == settings.bNeedToDetachFromAdmin) || (NULL == settings.hUserImpersonated)))
+			if ((FALSE == settings.user.IsEmpty()) && ((false == settings.bNeedToDetachFromAdmin) || (BAD_HANDLE(settings.hUserImpersonated))))
 				EstablishConnection(settings, remoteServer, settings.targetShare, true);
 
-			if(NULL != settings.hUserImpersonated)
+			if(!BAD_HANDLE(settings.hUserImpersonated))
 				ImpersonateLoggedOnUser(settings.hUserImpersonated);
 
 			if(FALSE == CopyFile(src, dest, FALSE))
@@ -804,7 +801,7 @@ void HandleMsg(RemMsg& msg, RemMsg& response, HANDLE hPipe)
 						break;
 					}
 					GetExitCodeProcess(pRemoteSettings->hProcess, &exitCode);
-					Log(StrFormat(L"%s returned %d", pRemoteSettings->app, exitCode), false);
+					Log(StrFormat(L"%s returned %d (0x%08X)", pRemoteSettings->app, exitCode, exitCode), false);
 
 					if((false == pRemoteSettings->bNoDelete) && (false == pRemoteSettings->bDontWaitForTerminate))
 					{

@@ -69,12 +69,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Power Admin LLC"
             VALUE "FileDescription", "PAExec Application"
-            VALUE "FileVersion", "1.29.0.0"
+            VALUE "FileVersion", "1.30.0.0"
             VALUE "InternalName", "PAExec"
-            VALUE "LegalCopyright", "Copyright (c) 2012-2021 Power Admin LLC"
+            VALUE "LegalCopyright", "Copyright (c) 2012-2023 Power Admin LLC"
             VALUE "OriginalFilename", "PAExec.exe"
             VALUE "ProductName", "PAExec Application"
-            VALUE "ProductVersion", "1.29.0.0"
+            VALUE "ProductVersion", "1.30.0.0"
         END
     END
     BLOCK "VarFileInfo"
