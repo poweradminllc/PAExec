@@ -18,7 +18,9 @@
 #include <WtsApi32.h>
 
 ////////////////////////////////////////////////////////////////////////
-//
+//v1.31 - Feb 19, 2025
+//    Better checking for impersonation handle value, which will quiet some false errors
+// 
 //v1.30 - Feb 2, 2023
 //    Tried to make interactive work better.  Works OK if no username/password is given, and if running as the system account is wanted, but
 //    still doesn't work well when credentials are given.
